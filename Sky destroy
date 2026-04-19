@@ -1,0 +1,214 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+if playerGui:FindFirstChild("OrbitalSkyDestroyer") then
+    playerGui.OrbitalSkyDestroyer:Destroy()
+end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "OrbitalSkyDestroyer"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local main = Instance.new("Frame")
+main.Size = UDim2.new(0, 180, 0, 110)
+main.Position = UDim2.new(0.5, -90, 0.2, 0)
+main.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
+main.BorderSizePixel = 0
+main.Active = true
+main.Parent = gui
+
+local cr = Instance.new("UICorner")
+cr.CornerRadius = UDim.new(0, 10)
+cr.Parent = main
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 35)
+title.BackgroundTransparency = 1
+title.Text = "XENON | Sky destroyer"
+title.TextColor3 = Color3.new(1,1,1)
+title.TextSize = 14
+title.Font = Enum.Font.SourceSansBold
+title.Parent = main
+
+local destroyBtn = Instance.new("TextButton")
+destroyBtn.Size = UDim2.new(1, -20, 0, 30)
+destroyBtn.Position = UDim2.new(0, 10, 0, 40)
+destroyBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+destroyBtn.Text = "DESTROY"
+destroyBtn.TextColor3 = Color3.new(1,1,1)
+destroyBtn.TextSize = 16
+destroyBtn.Font = Enum.Font.SourceSansBold
+destroyBtn.Parent = main
+
+local c1 = Instance.new("UICorner")
+c1.Parent = destroyBtn
+
+local stopBtn = Instance.new("TextButton")
+stopBtn.Size = UDim2.new(1, -20, 0, 30)
+stopBtn.Position = UDim2.new(0, 10, 0, 75)
+stopBtn.BackgroundColor3 = Color3.fromRGB(0, 60, 120)
+stopBtn.Text = "OFF"
+stopBtn.TextColor3 = Color3.new(1,1,1)
+stopBtn.TextSize = 16
+stopBtn.Font = Enum.Font.SourceSansBold
+stopBtn.Parent = main
+
+local c2 = Instance.new("UICorner")
+c2.Parent = stopBtn
+
+local humanoid
+local animationAsset
+local ANIMATION_ID = "rbxassetid://70883871260184"
+local heartbeatConnection = nil
+local isActive = false
+
+local function loadCharacter()
+    local char = player.Character or player.CharacterAdded:Wait()
+    humanoid = char:WaitForChild("Humanoid")
+    
+    if animationAsset then
+        animationAsset:Destroy()
+    end
+    animationAsset = Instance.new("Animation")
+    animationAsset.AnimationId = ANIMATION_ID
+    animationAsset.Name = "OrbitalDestroyerAnim"
+    animationAsset.Parent = humanoid
+end
+
+loadCharacter()
+
+player.CharacterAdded:Connect(loadCharacter)
+
+local function stopAllAnimTracks()
+    if humanoid then
+        local animator = humanoid:FindFirstChildOfClass("Animator")
+        if animator then
+            for _, track in pairs(animator:GetPlayingAnimationTracks()) do
+                if track.Animation and track.Animation.AnimationId == ANIMATION_ID then
+                    track:Stop()
+                    track:Destroy()
+                end
+            end
+        end
+    end
+end
+
+destroyBtn.MouseButton1Click:Connect(function()
+    if isActive then
+        if heartbeatConnection then
+            heartbeatConnection:Disconnect()
+            heartbeatConnection = nil
+        end
+        stopAllAnimTracks()
+        isActive = false
+        destroyBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+        return
+    end
+    
+    if not humanoid or not animationAsset then 
+        return 
+    end
+    
+    isActive = true
+    destroyBtn.BackgroundColor3 = Color3.fromRGB(0, 80, 200)
+    
+    heartbeatConnection = RunService.Heartbeat:Connect(function()
+        if not humanoid or not humanoid.Parent then
+            return
+        end
+        
+        local success, animTrack = (function()
+            return humanoid:LoadAnimation(animationAsset)
+        end)
+        
+        if success and animTrack then
+            animTrack.Priority = Enum.AnimationPriority.Core
+            animTrack:Play()
+        end
+    end)
+end)
+
+stopBtn.MouseButton1Click:Connect(function()
+    if heartbeatConnection then
+        heartbeatConnection:Disconnect()
+        heartbeatConnection = nil
+    end
+    
+    stopAllAnimTracks()
+    isActive = false
+    destroyBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+end)
+
+local dragging = false
+local dragStart
+local startPos
+local dragInput
+
+local function updateDrag(input)
+    if not dragging then return end
+    
+    local delta = input.Position - dragStart
+    local newPosition = UDim2.new(
+        startPos.X.Scale,
+        startPos.X.Offset + delta.X,
+        startPos.Y.Scale,
+        startPos.Y.Offset + delta.Y
+    )
+    
+    local viewportSize = workspace.CurrentCamera.ViewportSize
+    local maxX = viewportSize.X - main.AbsoluteSize.X
+    local maxY = viewportSize.Y - main.AbsoluteSize.Y
+    
+    local newX = math.clamp(newPosition.X.Offset, 0, maxX)
+    local newY = math.clamp(newPosition.Y.Offset, 0, maxY)
+    
+    main.Position = UDim2.new(0, newX, 0, newY)
+end
+
+title.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or 
+       input.UserInputType == Enum.UserInputType.Touch then
+        
+        dragging = true
+        dragStart = input.Position
+        startPos = main.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+                dragInput = nil
+            end
+        end)
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or 
+                     input.UserInputType == Enum.UserInputType.Touch) then
+        dragInput = input
+        updateDrag(input)
+    end
+end)
+
+gui.Destroying:Connect(function()
+    if heartbeatConnection then
+        heartbeatConnection:Disconnect()
+    end
+    stopAllAnimTracks()
+end)
+
+player.CharacterAdded:Connect(function()
+    if isActive then
+        task.wait(0.5)
+        if heartbeatConnection then
+        else
+            destroyBtn.MouseButton1Click:Fire()
+        end
+    end
+end)
